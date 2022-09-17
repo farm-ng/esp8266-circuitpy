@@ -1,4 +1,6 @@
-from machine import UART, Pin
+# from machine import UART, Pin
+from busio import UART
+from microcontroller import pin
 import time
 from httpParser import HttpParser
 
@@ -46,15 +48,14 @@ class ESP8266:
         self.__txPin = txPin
         self.__rxPin = rxPin
         # print(self.__uartPort,       self.__baudRate,        self.__txPin,        self.__rxPin)
-        self.__uartObj = UART(
-            self.__uartPort,
-            baudrate=self.__baudRate,
-            tx=Pin(self.__txPin),
-            rx=Pin(self.__rxPin),
-            txbuf=UART_Tx_BUFFER_LENGTH,
-            rxbuf=UART_Rx_BUFFER_LENGTH,
-        )
+        # self.__uartObj = UART(self.__uartPort, baudrate=self.__baudRate, tx=pin(self.__txPin), rx=pin(self.__rxPin), txbuf=UART_Tx_BUFFER_LENGTH, rxbuf=UART_Rx_BUFFER_LENGTH)
         # print(self.__uartObj)
+        self.__uartObj = UART(
+            pin.PA17,
+            pin.PA16,
+            baudrate=115200,
+            receiver_buffer_size=8192,
+        )
 
     def _createHTTPParseObj(self):
         """
@@ -73,11 +74,14 @@ class ESP8266:
         """
         This is private function for complete ESP8266 AT command Send/Receive operation.
         """
-        self.__rxData = str()
+        if isinstance(atCMD, str):
+            atCMD = atCMD.encode("utf-8")
+        # self.__rxData=str()
+        self.__rxData = bytes()
         self.__txData = atCMD
         # print("---------------------------"+self.__txData)
+        print("-->", self.__txData)
         self.__uartObj.write(self.__txData)
-        self.__rxData = bytes()
 
         time.sleep(delay)
 
@@ -86,13 +90,18 @@ class ESP8266:
 
         while True:
             # print(".")
-            if self.__uartObj.any() > 0:
+            # if self.__uartObj.any()>0:
+            if self.__uartObj.in_waiting > 0:
                 # print(self.__uartObj.any())
                 break
 
-        while self.__uartObj.any() > 0:
-            self.__rxData += self.__uartObj.read(UART_Rx_BUFFER_LENGTH)
+        while self.__uartObj.in_waiting > 0:
+            rx = self.__uartObj.read(UART_Rx_BUFFER_LENGTH)
+            print("CHUNK:", type(rx), type(self.__rxData))
+            print("<--", rx)
+            self.__rxData += rx
 
+        # print("<--", self.__rxData)
         # print(self.__rxData)
         if ESP8266_OK_STATUS in self.__rxData:
             return self.__rxData
@@ -207,19 +216,19 @@ class ESP8266:
         else:
             return None
 
-    """    
+    """
     def chcekSYSRAM(self):
-        #retData = self._sendToESP8266("AT+SYSRAM?\r\n")   
+        #retData = self._sendToESP8266("AT+SYSRAM?\r\n")
         self.__rxData=b''
         self.__txData="AT+SYSRAM?\r\n"
         self.__uartObj.write(self.__txData)
         self.__rxData=bytes()
-        
+
         time.sleep(2)
-        
+
         while self.__uartObj.any()>0:
             self.__rxData += self.__uartObj.read(1)
-            
+
         print(self.__rxData.decode())
         if ESP8266_OK_STATUS in self.__rxData:
             return self.__rxData
@@ -475,7 +484,10 @@ class ESP8266:
                     retData = self._sendToESP8266(getHeader, delay=2)
                     self._sendToESP8266("AT+CIPCLOSE\r\n")
                     retData = self.__httpResponse.parseHTTP(retData)
-                    return retData, self.__httpResponse.getHTTPResponse()
+                    # return retData, self.__httpResponse.getHTTPResponse()
+                    return retData, self.__httpResponse.getHTTPResponse().encode(
+                        "utf-8"
+                    )
                 else:
                     return 0, None
             else:
@@ -484,6 +496,7 @@ class ESP8266:
             self._sendToESP8266("AT+CIPCLOSE\r\n")
             return 0, None
 
+    # def doHttpPost(self,host,path,user_agent="RPi-Pico",content_type,content,port=80):
     def doHttpPost(self, host, path, user_agent, content_type, content, port=80):
         """
         This fucntion use to complete a HTTP Post operation

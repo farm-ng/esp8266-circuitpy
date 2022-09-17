@@ -1,14 +1,19 @@
-from machine import UART, Pin
+# from machine import UART, Pin
+from busio import UART
+from microcontroller import pin
 from esp8266 import ESP8266
 import time, sys
+
 
 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 print("RPi-Pico MicroPython Ver:", sys.version)
 print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
+SSID = "WIFI_NETWORK_NAME"
+PASSWORD = "foo-bar-baz-password"
 
 ## Create On-board Led object
-led = Pin(25, Pin.OUT)
+# led=pin(25,pin.OUT)
 
 ## Create an ESP8266 Object
 esp01 = ESP8266()
@@ -45,7 +50,7 @@ Connect with the WiFi
 """
 print("Try to connect with the WiFi..")
 while 1:
-    if "WIFI CONNECTED" in esp01.connectWiFi("ssid", "pwd"):
+    if "WIFI CONNECTED" in esp01.connectWiFi(SSID, PASSWORD):
         print("ESP8266 connect with the WiFi..")
         break
     else:
