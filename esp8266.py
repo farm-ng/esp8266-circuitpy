@@ -1,7 +1,7 @@
 # from machine import UART, Pin
 from busio import UART
 from microcontroller import pin
-import time
+from time import sleep
 from httpParser import HttpParser
 
 ESP8266_OK_STATUS = "OK\r\n"
@@ -83,7 +83,7 @@ class ESP8266:
         print("-->", self.__txData)
         self.__uartObj.write(self.__txData)
 
-        time.sleep(delay)
+        sleep(delay)
 
         # while self.__uartObj.any()>0:
         #    self.__rxData += self.__uartObj.read(1)
@@ -142,7 +142,7 @@ class ESP8266:
         retData = self._sendToESP8266("AT+RST\r\n")
         if retData != None:
             if ESP8266_OK_STATUS in retData:
-                time.sleep(5)
+                sleep(5)
                 # self.startUP()
                 return self.startUP()
             else:
@@ -152,7 +152,7 @@ class ESP8266:
 
     def echoING(self, enable=False):
         """
-        This function use to enable/diable AT command echo [Default set as false for diable Echo]
+        This function is used to enable/diable AT command echo [Default set as false for diable Echo]
 
         Return:
             True if echo off/on command succefully initiate with the ESP8266
@@ -180,7 +180,7 @@ class ESP8266:
 
     def getVersion(self):
         """
-        This function use to get AT command Version details
+        This function is used to get AT command Version details
 
         Return:
             Version details on success else None
@@ -202,7 +202,7 @@ class ESP8266:
 
     def reStore(self):
         """
-        This function use to reset the ESP8266 into the Factory reset mode & delete previous configurations
+        This function is used to reset the ESP8266 into the Factory reset mode & delete previous configurations
         Return:
             True on ESP8266 restore succesfully
             False on failed to restore ESP8266
@@ -238,7 +238,7 @@ class ESP8266:
 
     def getCurrentWiFiMode(self):
         """
-        This fucntion use to query ESP8266 WiFi's current mode [STA: Station, SoftAP: Software AccessPoint, or Both]
+        This function is used to query ESP8266 WiFi's current mode [STA: Station, SoftAP: Software AccessPoint, or Both]
 
         Return:
             STA if ESP8266's wifi's current mode pre-config as Station
@@ -261,7 +261,7 @@ class ESP8266:
 
     def setCurrentWiFiMode(self, mode=3):
         """
-        This fucntion use to set ESP8266 WiFi's current mode [STA: Station, SoftAP: Software AccessPoint, or Both]
+        This function is used to set ESP8266 WiFi's current mode [STA: Station, SoftAP: Software AccessPoint, or Both]
 
         Parameter:
             mode (int): ESP8266 WiFi's [ 1: STA, 2: SoftAP, 3: SoftAP+STA(default)]
@@ -283,7 +283,7 @@ class ESP8266:
 
     def getDefaultWiFiMode(self):
         """
-        This fucntion use to query ESP8266 WiFi's default mode [STA: Station, SoftAP: Software AccessPoint, or Both]
+        This function is used to query ESP8266 WiFi's default mode [STA: Station, SoftAP: Software AccessPoint, or Both]
 
         Return:
             STA if ESP8266's wifi's default mode pre-config as Station
@@ -307,7 +307,7 @@ class ESP8266:
 
     def setDefaultWiFiMode(self, mode=3):
         """
-        This fucntion use to set ESP8266 WiFi's default mode [STA: Station, SoftAP: Software AccessPoint, or Both]
+        This function is used to set ESP8266 WiFi's default mode [STA: Station, SoftAP: Software AccessPoint, or Both]
 
         Parameter:
             mode (int): ESP8266 WiFi's [ 1: STA, 2: SoftAP, 3: SoftAP+STA(default)]
@@ -329,25 +329,27 @@ class ESP8266:
 
     def getAvailableAPs(self):
         """
-        This fucntion use to query ESP8266 for available WiFi AccessPoins
+        This function is used to query ESP8266 for available WiFi AccessPoins
 
         Retuns:
             List of Available APs or None
         """
         retData = str(self._sendToESP8266("AT+CWLAP\r\n", delay=10))
         if retData != None:
-            retData = retData.replace("+CWLAP:", "")
-            retData = retData.replace(r"\r\n\r\nOK\r\n", "")
-            retData = retData.replace(r"\r\n", "@")
-            retData = retData.replace("b'(", "(").replace("'", "")
-            retData = retData.split("@")
-            retData = list(retData)
-            apLists = list()
+            retData = list(
+                retData.replace("+CWLAP:", "")
+                .replace(r"\r\n\r\nOK\r\n", "")
+                .replace(r"\r\n", "@")
+                .replace("b'(", "(")
+                .replace("\\'", "'")
+                .split("@")
+            )
 
+            apLists = list()
             for items in retData:
-                data = str(items).replace("(", "").replace(")", "").split(",")
-                data = tuple(data)
-                apLists.append(data)
+                apLists.append(
+                    tuple(str(items).replace("(", "").replace(")", "").split(","))
+                )
 
             return apLists
         else:
@@ -355,7 +357,7 @@ class ESP8266:
 
     def connectWiFi(self, ssid, pwd):
         """
-        This fucntion use to connect ESP8266 with a WiFi AccessPoins
+        This function is used to connect ESP8266 with a WiFi AccessPoins
 
         Parameters:
             ssid : WiFi AP's SSID
@@ -396,7 +398,7 @@ class ESP8266:
 
     def disconnectWiFi(self):
         """
-        This fucntion use to disconnect ESP8266 with a connected WiFi AccessPoins
+        This function is used to disconnect ESP8266 with a connected WiFi AccessPoints
 
         Return:
             False on failed to disconnect the WiFi
@@ -413,7 +415,7 @@ class ESP8266:
 
     def _createTCPConnection(self, link, port=80):
         """
-        This fucntion use to create connect between ESP8266 and Host.
+        This function is used to create connect between ESP8266 and Host.
         Just like create a socket before complete the HTTP Get/Post operation.
 
         Return:
@@ -448,7 +450,7 @@ class ESP8266:
 
     def doHttpGet(self, host, path, user_agent="RPi-Pico", port=80):
         """
-        This fucntion use to complete a HTTP Get operation
+        This function is used to complete a HTTP Get operation
 
         Parameter:
             host (str): Host URL [ex: get operation URL: www.httpbin.org/ip. so, Host URL only "www.httpbin.org"]
@@ -499,7 +501,7 @@ class ESP8266:
     # def doHttpPost(self,host,path,user_agent="RPi-Pico",content_type,content,port=80):
     def doHttpPost(self, host, path, user_agent, content_type, content, port=80):
         """
-        This fucntion use to complete a HTTP Post operation
+        This function is used to complete a HTTP Post operation
 
         Parameter:
             host (str): Host URL [ex: get operation URL: www.httpbin.org/ip. so, Host URL only "www.httpbin.org"]
