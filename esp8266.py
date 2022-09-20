@@ -1,7 +1,7 @@
 # from machine import UART, Pin
 from busio import UART
 from microcontroller import pin
-from time import sleep
+from time import sleep, monotonic
 from httpParser import HttpParser
 
 ESP8266_OK_STATUS = "OK\r\n"
@@ -70,7 +70,7 @@ class ESP8266:
             # del self.__httpResponse
             self.__httpResponse = HttpParser()
 
-    def _sendToESP8266(self, atCMD, delay=1):
+    def _sendToESP8266(self, atCMD, delay=1, timeout=1):
         """
         This is private function for complete ESP8266 AT command Send/Receive operation.
         """
@@ -88,7 +88,8 @@ class ESP8266:
         # while self.__uartObj.any()>0:
         #    self.__rxData += self.__uartObj.read(1)
 
-        while True:
+        stamp = monotonic()
+        while (monotonic() - stamp) < timeout:
             # print(".")
             # if self.__uartObj.any()>0:
             if self.__uartObj.in_waiting > 0:
@@ -334,7 +335,7 @@ class ESP8266:
         Retuns:
             List of Available APs or None
         """
-        retData = str(self._sendToESP8266("AT+CWLAP\r\n", delay=10))
+        retData = str(self._sendToESP8266("AT+CWLAP\r\n", delay=1, timeout=3))
         if retData != None:
             retData = list(
                 retData.replace("+CWLAP:", "")
@@ -371,7 +372,7 @@ class ESP8266:
         """
         txData = "AT+CWJAP_CUR=" + '"' + ssid + '"' + "," + '"' + pwd + '"' + "\r\n"
         # print(txData)
-        retData = self._sendToESP8266(txData, delay=15)
+        retData = self._sendToESP8266(txData, delay=1, timeout=3)
         # print(".....")
         # print(retData)
         if retData != None:
@@ -483,7 +484,7 @@ class ESP8266:
             retData = self._sendToESP8266(txData)
             if retData != None:
                 if ">" in retData:
-                    retData = self._sendToESP8266(getHeader, delay=2)
+                    retData = self._sendToESP8266(getHeader, delay=1, timeout=3)
                     self._sendToESP8266("AT+CIPCLOSE\r\n")
                     retData = self.__httpResponse.parseHTTP(retData)
                     # return retData, self.__httpResponse.getHTTPResponse()
@@ -543,7 +544,7 @@ class ESP8266:
             retData = self._sendToESP8266(txData)
             if retData != None:
                 if ">" in retData:
-                    retData = self._sendToESP8266(postHeader, delay=2)
+                    retData = self._sendToESP8266(postHeader, delay=1, timeout=3)
                     # print(".......@@",retData)
                     self._sendToESP8266("AT+CIPCLOSE\r\n")
                     # print(self.__httpResponse)
