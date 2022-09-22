@@ -33,7 +33,9 @@ class ESP8266:
     __txData = None
     __httpResponse = None
 
-    def __init__(self, uartPort=0, baudRate=115200, txPin=(0), rxPin=(1)):
+    def __init__(
+        self, uartPort=0, baudRate=115200, txPin=(0), rxPin=(1), rx_buffer_size=2048
+    ):
         """
         The constaructor for ESP8266 class
 
@@ -43,18 +45,19 @@ class ESP8266:
             txPin (init): RPI Pico's Tx pin [Default Pin 0]
             rxPin (init): RPI Pico's Rx pin [Default Pin 1]
         """
-        self.__uartPort = uartPort
-        self.__baudRate = baudRate
-        self.__txPin = txPin
-        self.__rxPin = rxPin
+        # self.__uartPort = uartPort
+        # self.__baudRate = baudRate
+        # self.__txPin = txPin
+        # self.__rxPin = rxPin
         # print(self.__uartPort,       self.__baudRate,        self.__txPin,        self.__rxPin)
         # self.__uartObj = UART(self.__uartPort, baudrate=self.__baudRate, tx=pin(self.__txPin), rx=pin(self.__rxPin), txbuf=UART_Tx_BUFFER_LENGTH, rxbuf=UART_Rx_BUFFER_LENGTH)
         # print(self.__uartObj)
+
         self.__uartObj = UART(
-            pin.PA17,
-            pin.PA16,
-            baudrate=115200,
-            receiver_buffer_size=8192,
+            txPin,
+            rxPin,
+            baudrate=baudRate,
+            receiver_buffer_size=rx_buffer_size,
         )
 
     def _createHTTPParseObj(self):

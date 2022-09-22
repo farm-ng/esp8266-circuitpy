@@ -20,7 +20,7 @@ class HttpParser:
 
     def parseHTTP(self, httpRes):
         """
-        This funtion use to parse the HTTP response and return back the HTTP status code
+        This function is used to parse the HTTP response and return back the HTTP status code
 
         Return:
             HTTP status code.
@@ -48,7 +48,7 @@ class HttpParser:
 
     def getHTTPErrCode(self):
         """
-        This funtion use to get latest parsed HTTP response's status code
+        This function is used to get latest parsed HTTP response's status code
 
         Return:
             HTTP status code.
@@ -57,7 +57,7 @@ class HttpParser:
 
     def getHTTPResponse(self):
         """
-        This funtion use to get latest parsed HTTP response's response massage.
+        This function is used to get latest parsed HTTP response's response massage.
 
         Return:
             HTTP response message.
