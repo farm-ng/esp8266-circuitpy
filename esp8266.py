@@ -543,6 +543,106 @@ class ESP8266:
             self._sendToESP8266("AT+CIPCLOSE\r\n")
             return 0, None
 
+    def doAppendingHttpGet(
+        self, host, base_path, count, user_agent="RPi-Pico", port=80, file=None
+    ):
+        """
+        This function is used to complete a HTTP Get operation
+
+        Parameter:
+            host (str): Host URL [ex: get operation URL: www.httpbin.org/ip. so, Host URL only "www.httpbin.org"]
+            path (str): Get operation's URL path [ex: get operation URL: www.httpbin.org/ip. so, the path "/ip"]
+            user-agent (str): User Agent Name [Default "RPi-Pico"]
+            post (int): HTTP post number [Default port number 80]
+
+        Return:
+            HTTP error code & HTTP response[If error not equal to 200 then the response is None]
+            On failed return 0 and None
+
+        """
+        assert file is not None
+
+        if self._createTCPConnection(host, port, timeout=5) == True:
+            # Create blank file
+            if "NO_USB" in listdir():
+                print("Creating / overwriting file named:", file)
+                f = open(file, "w")
+                f.close()
+                print("created file")
+            else:
+                print("Add 'NO_USB' file to allow writing to filesystem")
+
+            i = 0
+            while i < count:
+                gc_collect()
+                getHeader = (
+                    f"GET {base_path}{i:03d} HTTP/1.1\r\n"
+                    + f"Host: {host}\r\n"
+                    + f"User-Agent: {user_agent}\r\n\r\n"
+                )
+
+                txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
+                retData = self._sendToESP8266(txData, delay=0, timeout=2)
+                if retData != None:
+                    if ">" in retData:
+                        # try:
+                        ret = self._send_and_append(
+                            getHeader, delay=0, timeout=3, file=file
+                        )
+                        if not ret:
+                            print(f"Error on chunk {i:03d}! Cancelling download")
+                            break
+                        i += 1
+                        # except:
+                        #     pass
+                    else:
+                        print("Try again -- no '>'")
+                else:
+                    print("Try again - bad CIPSEND response")
+
+        else:
+            self._sendToESP8266("AT+CIPCLOSE\r\n")
+
+    def _send_and_append(self, atCMD, delay=0, timeout=1, file=None):
+        """
+        This is private function for complete ESP8266 AT command Send/Receive operation.
+        """
+        assert file is not None
+
+        if isinstance(atCMD, str):
+            atCMD = atCMD.encode("utf-8")
+        rx = bytes()
+
+        print("-->", atCMD)
+        self.__uartObj.write(atCMD)
+
+        sleep(delay)
+        stamp = monotonic()
+        while (monotonic() - stamp) < timeout:
+            if self.__uartObj.in_waiting > 0:
+                break
+
+        total_size = 0
+        while self.__uartObj.in_waiting > 0:
+            rx = self.__uartObj.read(self._rx_buffer_size)
+            print("CHUNK size:", len(rx))
+            total_size += len(rx)
+            print("<--", rx)
+
+            code, resp = parseHTTP(rx)
+            print("code:", code)
+            print("resp", len(resp), "\n", resp)
+            if code != 200:
+                print("Error code from http response")
+                return False
+
+            if "NO_USB" in listdir():
+                with open(file, "ab") as f:
+                    f.write(resp)
+            else:
+                print("Add 'NO_USB' file to allow writing to filesystem")
+        return True
+
     def __del__(self):
         """
         The destructor for ESP8266 class
