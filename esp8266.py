@@ -1,9 +1,6 @@
-# from machine import UART, Pin
 from busio import UART
-from microcontroller import pin
 from time import sleep, monotonic
 from os import listdir
-from gc import collect as gc_collect
 
 ESP8266_OK_STATUS = "OK\r\n"
 ESP8266_ERROR_STATUS = "ERROR\r\n"
@@ -14,8 +11,6 @@ ESP8266_WIFI_DISCONNECTED = "WIFI DISCONNECT\r\n"
 ESP8266_WIFI_AP_NOT_PRESENT = "WIFI AP NOT FOUND\r\n"
 ESP8266_WIFI_AP_WRONG_PWD = "WIFI AP WRONG PASSWORD\r\n"
 ESP8266_BUSY_STATUS = "busy p...\r\n"
-UART_Tx_BUFFER_LENGTH = 1024
-UART_Rx_BUFFER_LENGTH = 1024 * 2
 
 
 class ESP8266:
@@ -29,9 +24,6 @@ class ESP8266:
         txPin (init): RPI Pico's Tx pin [Default Pin 0]
         rxPin (init): RPI Pico's Rx pin [Default Pin 1]
     """
-
-    __rxData = None
-    __txData = None
 
     def __init__(
         self, uartPort=0, baudRate=115200, txPin=(0), rxPin=(1), rx_buffer_size=2048
@@ -59,48 +51,35 @@ class ESP8266:
         """
         if isinstance(atCMD, str):
             atCMD = atCMD.encode("utf-8")
-        # self.__rxData=str()
-        self.__rxData = bytes()
-        self.__txData = atCMD
-        # print("---------------------------"+self.__txData)
-        print("-->", self.__txData)
-        self.__uartObj.write(self.__txData)
+        # print("-->", atCMD)
+        self.__uartObj.write(atCMD)
 
         sleep(delay)
-
-        # while self.__uartObj.any()>0:
-        #    self.__rxData += self.__uartObj.read(1)
-
         stamp = monotonic()
         while (monotonic() - stamp) < timeout:
-            # print(".")
-            # if self.__uartObj.any()>0:
             if self.__uartObj.in_waiting > 0:
-                # print(self.__uartObj.any())
                 break
 
+        _rxData = bytes()
         while self.__uartObj.in_waiting > 0:
-            rx = self.__uartObj.read(UART_Rx_BUFFER_LENGTH)
-            print("CHUNK:", type(rx), type(self.__rxData))
-            print("<--", rx)
-            self.__rxData += rx
+            _rxData += self.__uartObj.read(self._rx_buffer_size)
 
-        # print("<--", self.__rxData)
-        # print(self.__rxData)
-        if ESP8266_OK_STATUS in self.__rxData:
-            return self.__rxData
-        elif ESP8266_ERROR_STATUS in self.__rxData:
-            return self.__rxData
-        elif ESP8266_FAIL_STATUS in self.__rxData:
-            return self.__rxData
-        elif ESP8266_BUSY_STATUS in self.__rxData:
+        # print("<--", _rxData)
+
+        if ESP8266_OK_STATUS in _rxData:
+            return _rxData
+        elif ESP8266_ERROR_STATUS in _rxData:
+            return _rxData
+        elif ESP8266_FAIL_STATUS in _rxData:
+            return _rxData
+        elif ESP8266_BUSY_STATUS in _rxData:
             return "ESP BUSY\r\n"
         else:
             return None
 
     def startUP(self):
         """
-        This funtion use to check the communication between ESP8266 & RPI Pico
+        This function is used to check the communication between ESP8266 & RPI Pico
 
         Return:
             True if communication success with the ESP8266
@@ -117,7 +96,7 @@ class ESP8266:
 
     def reStart(self):
         """
-        This funtion use to Reset the ESP8266
+        This function is used to Reset the ESP8266
 
         Return:
             True if Reset successfully done with the ESP8266
@@ -199,26 +178,6 @@ class ESP8266:
                 return False
         else:
             return None
-
-    """
-    def chcekSYSRAM(self):
-        #retData = self._sendToESP8266("AT+SYSRAM?\r\n")
-        self.__rxData=b''
-        self.__txData="AT+SYSRAM?\r\n"
-        self.__uartObj.write(self.__txData)
-        self.__rxData=bytes()
-
-        time.sleep(2)
-
-        while self.__uartObj.any()>0:
-            self.__rxData += self.__uartObj.read(1)
-
-        print(self.__rxData.decode())
-        if ESP8266_OK_STATUS in self.__rxData:
-            return self.__rxData
-        else:
-            return 1
-    """
 
     def getCurrentWiFiMode(self):
         """
@@ -407,19 +366,7 @@ class ESP8266:
             True on successfully create and establish a socket connection.
         """
         # self._sendToESP8266("AT+CIPMUX=0")
-        txData = (
-            "AT+CIPSTART="
-            + '"'
-            + "TCP"
-            + '"'
-            + ","
-            + '"'
-            + link
-            + '"'
-            + ","
-            + str(port)
-            + "\r\n"
-        )
+        txData = f'AT+CIPSTART="TCP","{link}",{str(port)}\r\n'
         retData = self._sendToESP8266(txData, delay=delay, timeout=timeout)
         if retData != None:
             if ESP8266_OK_STATUS in retData:
@@ -429,7 +376,16 @@ class ESP8266:
         else:
             False
 
-    def doHttpGet(self, host, path, user_agent="RPi-Pico", port=80):
+    def doHttpGet(
+        self,
+        host: str,
+        path: str,
+        user_agent: str = "RPi-Pico",
+        port: int = 80,
+        file: str = None,
+        open_conn: bool = True,
+        close_conn: bool = True,
+    ):
         """
         This function is used to complete a HTTP Get operation
 
@@ -438,37 +394,48 @@ class ESP8266:
             path (str): Get operation's URL path [ex: get operation URL: www.httpbin.org/ip. so, the path "/ip"]
             user-agent (str): User Agent Name [Default "RPi-Pico"]
             post (int): HTTP post number [Default port number 80]
+            file (str): Write HTTP GET result to this file path, if given
+            open_conn (bool): Whether to open TCP connection (AT+CIPSTART)
+            close_conn (bool): Whether to close TCP connection (AT+CIPCLOSE)
 
         Return:
             HTTP error code & HTTP response[If error not equal to 200 then the response is None]
             On failed return 0 and None
 
         """
-        if self._createTCPConnection(host, port) == True:
-            self._createHTTPParseObj()
-            # getHeader="GET "+path+" HTTP/1.1\r\n"+"Host: "+host+":"+str(port)+"\r\n"+"User-Agent: "+user_agent+"\r\n"+"\r\n";
+        if open_conn:
+            connected = self._createTCPConnection(host, port, timeout=5)
+        else:
+            connected = True
+
+        if connected:
             getHeader = (
-                "GET "
-                + path
-                + " HTTP/1.1\r\n"
-                + "Host: "
-                + host
-                + "\r\n"
-                + "User-Agent: "
-                + user_agent
-                + "\r\n"
-                + "\r\n"
+                f"GET {path} HTTP/1.1\r\n"
+                + f"Host: {host}\r\n"
+                + f"User-Agent: {user_agent}\r\n\r\n"
             )
-            # print(getHeader,len(getHeader))
             txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
             retData = self._sendToESP8266(txData, delay=2, timeout=10)
             if retData != None:
                 if ">" in retData:
                     retData = self._sendToESP8266(getHeader, delay=1, timeout=3)
+                    code, resp = parseHTTP(retData)
+                    del retData
+
                     if close_conn:
                         self._sendToESP8266("AT+CIPCLOSE\r\n")
 
-                    code, resp = parseHTTP(retData)
+                    write_bool = (
+                        resp is not None
+                        and code == 200
+                        and file is not None
+                        and all(x in listdir() for x in ["NO_USB", file])
+                    )
+                    # Create/write to file
+                    if write_bool:
+                        f = open(file, "wb")
+                        f.write(resp)
+
                     if resp is not None:
                         return code, resp.encode("utf-8")
                     else:
@@ -482,7 +449,6 @@ class ESP8266:
             self._sendToESP8266("AT+CIPCLOSE\r\n")
             return 0, None
 
-    # def doHttpPost(self,host,path,user_agent="RPi-Pico",content_type,content,port=80):
     def doHttpPost(self, host, path, user_agent, content_type, content, port=80):
         """
         This function is used to complete a HTTP Post operation
@@ -500,7 +466,7 @@ class ESP8266:
             On failed return 0 and None
 
         """
-        if self._createTCPConnection(host, port) == True:
+        if self._createTCPConnection(host, port):
             postHeader = (
                 "POST "
                 + path
@@ -543,106 +509,6 @@ class ESP8266:
             self._sendToESP8266("AT+CIPCLOSE\r\n")
             return 0, None
 
-    def doAppendingHttpGet(
-        self, host, base_path, count, user_agent="RPi-Pico", port=80, file=None
-    ):
-        """
-        This function is used to complete a HTTP Get operation
-
-        Parameter:
-            host (str): Host URL [ex: get operation URL: www.httpbin.org/ip. so, Host URL only "www.httpbin.org"]
-            path (str): Get operation's URL path [ex: get operation URL: www.httpbin.org/ip. so, the path "/ip"]
-            user-agent (str): User Agent Name [Default "RPi-Pico"]
-            post (int): HTTP post number [Default port number 80]
-
-        Return:
-            HTTP error code & HTTP response[If error not equal to 200 then the response is None]
-            On failed return 0 and None
-
-        """
-        assert file is not None
-
-        if self._createTCPConnection(host, port, timeout=5) == True:
-            # Create blank file
-            if "NO_USB" in listdir():
-                print("Creating / overwriting file named:", file)
-                f = open(file, "w")
-                f.close()
-                print("created file")
-            else:
-                print("Add 'NO_USB' file to allow writing to filesystem")
-
-            i = 0
-            while i < count:
-                gc_collect()
-                getHeader = (
-                    f"GET {base_path}{i:03d} HTTP/1.1\r\n"
-                    + f"Host: {host}\r\n"
-                    + f"User-Agent: {user_agent}\r\n\r\n"
-                )
-
-                txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
-                retData = self._sendToESP8266(txData, delay=0, timeout=2)
-                if retData != None:
-                    if ">" in retData:
-                        # try:
-                        ret = self._send_and_append(
-                            getHeader, delay=0, timeout=3, file=file
-                        )
-                        if not ret:
-                            print(f"Error on chunk {i:03d}! Cancelling download")
-                            break
-                        i += 1
-                        # except:
-                        #     pass
-                    else:
-                        print("Try again -- no '>'")
-                else:
-                    print("Try again - bad CIPSEND response")
-
-        else:
-            self._sendToESP8266("AT+CIPCLOSE\r\n")
-
-    def _send_and_append(self, atCMD, delay=0, timeout=1, file=None):
-        """
-        This is private function for complete ESP8266 AT command Send/Receive operation.
-        """
-        assert file is not None
-
-        if isinstance(atCMD, str):
-            atCMD = atCMD.encode("utf-8")
-        rx = bytes()
-
-        print("-->", atCMD)
-        self.__uartObj.write(atCMD)
-
-        sleep(delay)
-        stamp = monotonic()
-        while (monotonic() - stamp) < timeout:
-            if self.__uartObj.in_waiting > 0:
-                break
-
-        total_size = 0
-        while self.__uartObj.in_waiting > 0:
-            rx = self.__uartObj.read(self._rx_buffer_size)
-            print("CHUNK size:", len(rx))
-            total_size += len(rx)
-            print("<--", rx)
-
-            code, resp = parseHTTP(rx)
-            print("code:", code)
-            print("resp", len(resp), "\n", resp)
-            if code != 200:
-                print("Error code from http response")
-                return False
-
-            if "NO_USB" in listdir():
-                with open(file, "ab") as f:
-                    f.write(resp)
-            else:
-                print("Add 'NO_USB' file to allow writing to filesystem")
-        return True
-
     def __del__(self):
         """
         The destructor for ESP8266 class
@@ -659,26 +525,18 @@ def parseHTTP(httpRes):
     Return:
         HTTP status code, HTTP parsed response
     """
-    # print(">>>>",httpRes)
     if httpRes != None:
-        # try:
         httpRes = str(httpRes).partition("+IPD,")[2].split(r"\r\n\r\n")
-        # print(">>>>>>>>>>>>>>>>>", retParseResponse)
-        __httpResponse = httpRes[1]
-        # print(">>>>>>>>>>>>>>>>>???", retParseResponse[1])
-        __httpHeader = str(httpRes[0]).partition(":")[2]
+        resp = httpRes[1]
+        header = str(httpRes[0]).partition(":")[2]
         del httpRes
-        # print("--", self.__httpHeader)
-        for code in str(__httpHeader.partition(r"\r\n")[0]).split():
+
+        for code in str(header.partition(r"\r\n")[0]).split():
             if code.isdigit():
                 __httpErrCode = int(code)
-
         if __httpErrCode != 200:
-            __httpResponse = None
+            resp = None
 
-        return __httpErrCode, __httpResponse
-        # except:
-        #     print("Failed HTTP parse")
-        #     return 0, None
+        return __httpErrCode, resp
     else:
         return 0, None
