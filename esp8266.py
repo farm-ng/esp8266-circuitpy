@@ -2,7 +2,8 @@
 from busio import UART
 from microcontroller import pin
 from time import sleep, monotonic
-from httpParser import HttpParser
+from os import listdir
+from gc import collect as gc_collect
 
 ESP8266_OK_STATUS = "OK\r\n"
 ESP8266_ERROR_STATUS = "ERROR\r\n"
@@ -31,47 +32,26 @@ class ESP8266:
 
     __rxData = None
     __txData = None
-    __httpResponse = None
 
     def __init__(
         self, uartPort=0, baudRate=115200, txPin=(0), rxPin=(1), rx_buffer_size=2048
     ):
         """
-        The constaructor for ESP8266 class
+        The constructor for ESP8266 class
 
         Parameters:
-            uartPort (int): The Uart port numbet of the RPI Pico's UART BUS [Default UART0]
-            baudRate (int): UART Baud-Rate for communncating between RPI Pico's & ESP8266 [Default 115200]
+            uartPort (int): The UART port number of the RPI Pico's UART BUS [Default UART0]
+            baudRate (int): UART Baud-Rate for communicating between RPI Pico's & ESP8266 [Default 115200]
             txPin (init): RPI Pico's Tx pin [Default Pin 0]
             rxPin (init): RPI Pico's Rx pin [Default Pin 1]
         """
-        # self.__uartPort = uartPort
-        # self.__baudRate = baudRate
-        # self.__txPin = txPin
-        # self.__rxPin = rxPin
-        # print(self.__uartPort,       self.__baudRate,        self.__txPin,        self.__rxPin)
-        # self.__uartObj = UART(self.__uartPort, baudrate=self.__baudRate, tx=pin(self.__txPin), rx=pin(self.__rxPin), txbuf=UART_Tx_BUFFER_LENGTH, rxbuf=UART_Rx_BUFFER_LENGTH)
-        # print(self.__uartObj)
-
+        self._rx_buffer_size = rx_buffer_size
         self.__uartObj = UART(
             txPin,
             rxPin,
             baudrate=baudRate,
             receiver_buffer_size=rx_buffer_size,
         )
-
-    def _createHTTPParseObj(self):
-        """
-        This is private function for create HTTP response every time
-        before doing the HTTP Post/Get operation
-
-        """
-        if self.__httpResponse != None:
-            del self.__httpResponse
-            self.__httpResponse = HttpParser()
-        else:
-            # del self.__httpResponse
-            self.__httpResponse = HttpParser()
 
     def _sendToESP8266(self, atCMD, delay=1, timeout=1):
         """
@@ -338,7 +318,7 @@ class ESP8266:
         Retuns:
             List of Available APs or None
         """
-        retData = str(self._sendToESP8266("AT+CWLAP\r\n", delay=1, timeout=3))
+        retData = str(self._sendToESP8266("AT+CWLAP\r\n", delay=1, timeout=5))
         if retData != None:
             retData = list(
                 retData.replace("+CWLAP:", "")
@@ -375,7 +355,7 @@ class ESP8266:
         """
         txData = "AT+CWJAP_CUR=" + '"' + ssid + '"' + "," + '"' + pwd + '"' + "\r\n"
         # print(txData)
-        retData = self._sendToESP8266(txData, delay=1, timeout=3)
+        retData = self._sendToESP8266(txData, delay=1, timeout=5)
         # print(".....")
         # print(retData)
         if retData != None:
@@ -417,7 +397,7 @@ class ESP8266:
         else:
             return False
 
-    def _createTCPConnection(self, link, port=80):
+    def _createTCPConnection(self, link, port=80, delay=1, timeout=1):
         """
         This function is used to create connect between ESP8266 and Host.
         Just like create a socket before complete the HTTP Get/Post operation.
@@ -440,10 +420,7 @@ class ESP8266:
             + str(port)
             + "\r\n"
         )
-        # print(txData)
-        retData = self._sendToESP8266(txData)
-        # print(".....")
-        # print(retData)
+        retData = self._sendToESP8266(txData, delay=delay, timeout=timeout)
         if retData != None:
             if ESP8266_OK_STATUS in retData:
                 return True
@@ -484,21 +461,24 @@ class ESP8266:
             )
             # print(getHeader,len(getHeader))
             txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
-            retData = self._sendToESP8266(txData)
+            retData = self._sendToESP8266(txData, delay=2, timeout=10)
             if retData != None:
                 if ">" in retData:
                     retData = self._sendToESP8266(getHeader, delay=1, timeout=3)
-                    self._sendToESP8266("AT+CIPCLOSE\r\n")
-                    retData = self.__httpResponse.parseHTTP(retData)
-                    # return retData, self.__httpResponse.getHTTPResponse()
-                    return retData, self.__httpResponse.getHTTPResponse().encode(
-                        "utf-8"
-                    )
+                    if close_conn:
+                        self._sendToESP8266("AT+CIPCLOSE\r\n")
+
+                    code, resp = parseHTTP(retData)
+                    if resp is not None:
+                        return code, resp.encode("utf-8")
+                    else:
+                        return code, None
                 else:
                     return 0, None
             else:
                 return 0, None
         else:
+            # Close anyways if connection creation errs
             self._sendToESP8266("AT+CIPCLOSE\r\n")
             return 0, None
 
@@ -521,7 +501,6 @@ class ESP8266:
 
         """
         if self._createTCPConnection(host, port) == True:
-            self._createHTTPParseObj()
             postHeader = (
                 "POST "
                 + path
@@ -548,11 +527,14 @@ class ESP8266:
             if retData != None:
                 if ">" in retData:
                     retData = self._sendToESP8266(postHeader, delay=1, timeout=3)
-                    # print(".......@@",retData)
                     self._sendToESP8266("AT+CIPCLOSE\r\n")
-                    # print(self.__httpResponse)
-                    retData = self.__httpResponse.parseHTTP(retData)
-                    return retData, self.__httpResponse.getHTTPResponse()
+
+                    code, resp = parseHTTP(retData)
+                    if resp is not None:
+                        return code, resp.encode("utf-8")
+                    else:
+                        return code, None
+
                 else:
                     return 0, None
             else:
@@ -563,7 +545,40 @@ class ESP8266:
 
     def __del__(self):
         """
-        The distaructor for ESP8266 class
+        The destructor for ESP8266 class
         """
         print("Destructor called, ESP8266 deleted.")
         pass
+
+
+def parseHTTP(httpRes):
+    """
+    This function is used to parse the HTTP response and return back the HTTP status code
+    and the parsed response
+
+    Return:
+        HTTP status code, HTTP parsed response
+    """
+    # print(">>>>",httpRes)
+    if httpRes != None:
+        # try:
+        httpRes = str(httpRes).partition("+IPD,")[2].split(r"\r\n\r\n")
+        # print(">>>>>>>>>>>>>>>>>", retParseResponse)
+        __httpResponse = httpRes[1]
+        # print(">>>>>>>>>>>>>>>>>???", retParseResponse[1])
+        __httpHeader = str(httpRes[0]).partition(":")[2]
+        del httpRes
+        # print("--", self.__httpHeader)
+        for code in str(__httpHeader.partition(r"\r\n")[0]).split():
+            if code.isdigit():
+                __httpErrCode = int(code)
+
+        if __httpErrCode != 200:
+            __httpResponse = None
+
+        return __httpErrCode, __httpResponse
+        # except:
+        #     print("Failed HTTP parse")
+        #     return 0, None
+    else:
+        return 0, None
