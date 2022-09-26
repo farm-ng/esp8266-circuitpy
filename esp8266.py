@@ -63,7 +63,6 @@ class ESP8266:
         _rxData = bytes()
         while self.__uartObj.in_waiting > 0:
             _rxData += self.__uartObj.read(self._rx_buffer_size)
-
         # print("<--", _rxData)
 
         if ESP8266_OK_STATUS in _rxData:
@@ -415,15 +414,15 @@ class ESP8266:
                 + f"User-Agent: {user_agent}\r\n\r\n"
             )
             txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
-            retData = self._sendToESP8266(txData, delay=2, timeout=10)
+            retData = self._sendToESP8266(txData, delay=1, timeout=5)
             if retData != None:
                 if ">" in retData:
                     retData = self._sendToESP8266(getHeader, delay=1, timeout=3)
                     code, resp = parseHTTP(retData)
                     del retData
 
-                    if close_conn:
-                        self._sendToESP8266("AT+CIPCLOSE\r\n")
+                    while file is not None and file[0] == "/":
+                        file = file[1:]  # To find with os.listdir()
 
                     write_bool = (
                         resp is not None
@@ -431,13 +430,21 @@ class ESP8266:
                         and file is not None
                         and all(x in listdir() for x in ["NO_USB", file])
                     )
-                    # Create/write to file
+                    # Append file with parsed http response
                     if write_bool:
-                        f = open(file, "wb")
+                        print("Appending file:", file)
+                        f = open(file, "ab")
                         f.write(resp)
+                        f.close()
+                    else:
+                        print("Not writing response to file:", file)
+                        # print(resp)
+
+                    if close_conn:
+                        self._sendToESP8266("AT+CIPCLOSE\r\n")
 
                     if resp is not None:
-                        return code, resp.encode("utf-8")
+                        return code, resp
                     else:
                         return code, None
                 else:
@@ -527,16 +534,18 @@ def parseHTTP(httpRes):
     """
     if httpRes != None:
         httpRes = str(httpRes).partition("+IPD,")[2].split(r"\r\n\r\n")
-        resp = httpRes[1]
         header = str(httpRes[0]).partition(":")[2]
-        del httpRes
 
         for code in str(header.partition(r"\r\n")[0]).split():
             if code.isdigit():
                 __httpErrCode = int(code)
-        if __httpErrCode != 200:
-            resp = None
 
-        return __httpErrCode, resp
+        if __httpErrCode != 200:
+            return __httpErrCode, None
+
+        if httpRes[1][:8] == "\\r\\n+IPD":  # Sometimes prefaces received data
+            return __httpErrCode, httpRes[1].partition(":")[2].encode("utf-8")
+        else:
+            return __httpErrCode, httpRes[1].encode("utf-8")
     else:
         return 0, None
