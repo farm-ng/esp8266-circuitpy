@@ -45,7 +45,7 @@ class ESP8266:
             receiver_buffer_size=rx_buffer_size,
         )
 
-    def _sendToESP8266(self, atCMD, delay=1, timeout=1):
+    def _sendToESP8266(self, atCMD, delay=0, timeout=2):
         """
         This is private function for complete ESP8266 AT command Send/Receive operation.
         """
@@ -355,7 +355,7 @@ class ESP8266:
         else:
             return False
 
-    def _createTCPConnection(self, link, port=80, delay=1, timeout=1):
+    def _createTCPConnection(self, link, port=80, delay=0, timeout=2):
         """
         This function is used to create connect between ESP8266 and Host.
         Just like create a socket before complete the HTTP Get/Post operation.
@@ -414,10 +414,10 @@ class ESP8266:
                 + f"User-Agent: {user_agent}\r\n\r\n"
             )
             txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
-            retData = self._sendToESP8266(txData, delay=1, timeout=5)
+            retData = self._sendToESP8266(txData, timeout=5)
             if retData != None:
                 if ">" in retData:
-                    retData = self._sendToESP8266(getHeader, delay=1, timeout=3)
+                    retData = self._sendToESP8266(getHeader, timeout=5)
                     code, resp = parseHTTP(retData)
                     del retData
 
@@ -473,7 +473,7 @@ class ESP8266:
             On failed return 0 and None
 
         """
-        if self._createTCPConnection(host, port):
+        if self._createTCPConnection(host, port, timeout=5):
             postHeader = (
                 "POST "
                 + path
