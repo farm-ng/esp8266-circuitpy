@@ -541,21 +541,33 @@ def parseHTTP(httpRes):
     Return:
         HTTP status code, HTTP parsed response
     """
-    if httpRes != None:
-        httpRes = httpRes.partition(b"+IPD,")[2].split(b"\r\n\r\n")
-        header = httpRes[0].partition(b":")[2]
-
-        for code in header.partition(b"\r\n")[0].split():
-            if code.isdigit():
-                __httpErrCode = int(code)
-                break
-
-        if __httpErrCode != 200:
-            return __httpErrCode, None
-
-        if httpRes[1][:6] == b"\r\n+IPD":  # Sometimes prefaces received data
-            return __httpErrCode, httpRes[1].partition(b":")[2]
-        else:
-            return __httpErrCode, httpRes[1]
-    else:
+    if httpRes == None:
         return 0, None
+
+    httpRes = httpRes.partition(b"+IPD,")[2].split(b"\r\n\r\n")
+    header = httpRes[0].partition(b":")[2]
+    httpRes = httpRes[1]
+
+    for code in header.partition(b"\r\n")[0].split():
+        if code.isdigit():
+            httpErrCode = int(code)
+            break
+
+    if httpErrCode != 200:
+        return httpErrCode, None
+
+    if b"\r\n+IPD" not in httpRes:
+        return httpErrCode, httpRes
+
+    # Free up some memory
+    del header, code
+
+    # Remove all: '\r\n+IPD,####:'
+    res = b""
+    while b"\r\n+IPD" in httpRes:
+        part = httpRes.partition(b"\r\n+IPD")
+        res += part[0]
+        httpRes = part[2].partition(b":")[2]
+    res += httpRes
+
+    return httpErrCode, res
