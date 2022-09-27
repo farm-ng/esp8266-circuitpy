@@ -381,6 +381,7 @@ class ESP8266:
         path: str,
         user_agent: str = "RPi-Pico",
         port: int = 80,
+        chunk_dir: str = None,
         file: str = None,
         open_conn: bool = True,
         close_conn: bool = True,
@@ -393,7 +394,8 @@ class ESP8266:
             path (str): Get operation's URL path [ex: get operation URL: www.httpbin.org/ip. so, the path "/ip"]
             user-agent (str): User Agent Name [Default "RPi-Pico"]
             post (int): HTTP post number [Default port number 80]
-            file (str): Write HTTP GET result to this file path, if given
+            chunk_dir (str): Write HTTP GET result in this directory, if given
+            file (str): Write HTTP GET result to this file, if given
             open_conn (bool): Whether to open TCP connection (AT+CIPSTART)
             close_conn (bool): Whether to close TCP connection (AT+CIPCLOSE)
 
@@ -421,23 +423,30 @@ class ESP8266:
                     code, resp = parseHTTP(retData)
                     del retData
 
+                    # Formatting to find with os.listdir()
                     while file is not None and file[0] == "/":
-                        file = file[1:]  # To find with os.listdir()
+                        file = file[1:]
+                    while chunk_dir is not None and chunk_dir[0] == "/":
+                        chunk_dir = chunk_dir[1:]
+                    while chunk_dir is not None and chunk_dir[-1] == "/":
+                        chunk_dir = chunk_dir[:-1]
 
+                    # Append file with parsed http response
                     write_bool = (
                         resp is not None
                         and code == 200
                         and file is not None
-                        and all(x in listdir() for x in ["NO_USB", file])
+                        and chunk_dir is not None
+                        and all(x in listdir() for x in ["NO_USB", chunk_dir])
+                        and file in listdir(chunk_dir)
                     )
-                    # Append file with parsed http response
                     if write_bool:
-                        print("Appending file:", file)
-                        f = open(file, "ab")
+                        print("Appending file:", f"{chunk_dir}/{file}")
+                        f = open(f"{chunk_dir}/{file}", "ab")
                         f.write(resp)
                         f.close()
                     else:
-                        print("Not writing response to file:", file)
+                        print("Not writing response to file:", f"{chunk_dir}/{file}")
                         # print(resp)
 
                     if close_conn:
