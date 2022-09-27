@@ -504,7 +504,7 @@ class ESP8266:
 
                     code, resp = parseHTTP(retData)
                     if resp is not None:
-                        return code, resp.encode("utf-8")
+                        return code, resp
                     else:
                         return code, None
 
@@ -533,19 +533,20 @@ def parseHTTP(httpRes):
         HTTP status code, HTTP parsed response
     """
     if httpRes != None:
-        httpRes = str(httpRes).partition("+IPD,")[2].split(r"\r\n\r\n")
-        header = str(httpRes[0]).partition(":")[2]
+        httpRes = httpRes.partition(b"+IPD,")[2].split(b"\r\n\r\n")
+        header = httpRes[0].partition(b":")[2]
 
-        for code in str(header.partition(r"\r\n")[0]).split():
+        for code in header.partition(b"\r\n")[0].split():
             if code.isdigit():
                 __httpErrCode = int(code)
+                break
 
         if __httpErrCode != 200:
             return __httpErrCode, None
 
-        if httpRes[1][:8] == "\\r\\n+IPD":  # Sometimes prefaces received data
-            return __httpErrCode, httpRes[1].partition(":")[2].encode("utf-8")
+        if httpRes[1][:6] == b"\r\n+IPD":  # Sometimes prefaces received data
+            return __httpErrCode, httpRes[1].partition(b":")[2]
         else:
-            return __httpErrCode, httpRes[1].encode("utf-8")
+            return __httpErrCode, httpRes[1]
     else:
         return 0, None
