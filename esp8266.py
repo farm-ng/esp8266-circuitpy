@@ -544,9 +544,10 @@ def parseHTTP(httpRes):
     if httpRes == None:
         return 0, None
 
-    httpRes = httpRes.partition(b"+IPD,")[2].split(b"\r\n\r\n")
+    # Separate out http GET header details
+    httpRes = httpRes.partition(b"+IPD,")[2].partition(b"\r\n\r\n")
     header = httpRes[0].partition(b":")[2]
-    httpRes = httpRes[1]
+    httpRes = httpRes[2]
 
     for code in header.partition(b"\r\n")[0].split():
         if code.isdigit():
@@ -557,17 +558,24 @@ def parseHTTP(httpRes):
         return httpErrCode, None
 
     if b"\r\n+IPD" not in httpRes:
+        # Don't need to filter
         return httpErrCode, httpRes
 
     # Free up some memory
     del header, code
 
-    # Remove all: '\r\n+IPD,####:'
+    # Remove all: b'\r\n+IPD,####:' from http get
     res = b""
     while b"\r\n+IPD" in httpRes:
         part = httpRes.partition(b"\r\n+IPD")
         res += part[0]
-        httpRes = part[2].partition(b":")[2]
+        part = part[2].partition(b":")
+        httpRes = part[2]
+
+        # Special case for the b'\r\n+IPD' in this file
+        if not part[0].replace(b",", b"").isdigit():
+            res += b"\r\n+IPD" + part[0] + part[1]
+
     res += httpRes
 
     return httpErrCode, res
