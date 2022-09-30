@@ -1,6 +1,7 @@
 from busio import UART
 from time import sleep, monotonic
 from os import listdir
+from gc import collect, mem_free
 
 ESP8266_OK_STATUS = "OK\r\n"
 ESP8266_ERROR_STATUS = "ERROR\r\n"
@@ -53,6 +54,7 @@ class ESP8266:
             atCMD = atCMD.encode("utf-8")
         # print("-->", atCMD)
         self.__uartObj.write(atCMD)
+        del atCMD
 
         sleep(delay)
         stamp = monotonic()
@@ -385,6 +387,7 @@ class ESP8266:
         file: str = None,
         open_conn: bool = True,
         close_conn: bool = True,
+        writeable_mc: bool = False,
     ):
         """
         This function is used to complete a HTTP Get operation
@@ -417,19 +420,28 @@ class ESP8266:
             )
             txData = "AT+CIPSEND=" + str(len(getHeader)) + "\r\n"
             retData = self._sendToESP8266(txData, timeout=5)
+            del txData
+            collect()
+
             if retData != None:
                 if ">" in retData:
                     retData = self._sendToESP8266(getHeader, timeout=5)
+                    collect()
                     code, resp = parseHTTP(retData)
                     del retData
+                    collect()
 
-                    # Formatting to find with os.listdir()
-                    while file is not None and file[0] == "/":
-                        file = file[1:]
-                    while chunk_dir is not None and chunk_dir[0] == "/":
-                        chunk_dir = chunk_dir[1:]
-                    while chunk_dir is not None and chunk_dir[-1] == "/":
-                        chunk_dir = chunk_dir[:-1]
+                    # Ensure formatting to find with os.listdir()
+                    if file is not None:
+                        file = file.strip("/")
+                        assert (
+                            "/" not in file
+                        ), "File must be in the download directory root"
+                    if chunk_dir is not None:
+                        chunk_dir = chunk_dir.strip("/")
+                        assert (
+                            "/" not in chunk_dir
+                        ), "Download directory must be in the microcontroller root"
 
                     # Append file with parsed http response
                     write_bool = (
@@ -437,17 +449,23 @@ class ESP8266:
                         and code == 200
                         and file is not None
                         and chunk_dir is not None
-                        and all(x in listdir() for x in ["NO_USB", chunk_dir])
+                        and writeable_mc
+                        and chunk_dir in listdir()
                         and file in listdir(chunk_dir)
                     )
                     if write_bool:
-                        print("Appending file:", f"{chunk_dir}/{file}")
+                        print(
+                            "Writing data from http response to file:",
+                            f"{chunk_dir}/{file}",
+                        )
                         f = open(f"{chunk_dir}/{file}", "ab")
                         f.write(resp)
                         f.close()
                     else:
-                        print("Not writing response to file:", f"{chunk_dir}/{file}")
-                        # print(resp)
+                        print(
+                            "NOT writing data from http response to file:",
+                            f"{chunk_dir}/{file}",
+                        )
 
                     if close_conn:
                         self._sendToESP8266("AT+CIPCLOSE\r\n")
