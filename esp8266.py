@@ -93,7 +93,7 @@ class ESP8266:
             else:
                 return False
         else:
-            False
+            return False
 
     def reStart(self):
         """
@@ -112,7 +112,7 @@ class ESP8266:
             else:
                 return False
         else:
-            False
+            return False
 
     def echoING(self, enable=False):
         """
@@ -375,7 +375,7 @@ class ESP8266:
             else:
                 return False
         else:
-            False
+            return False
 
     def doHttpGet(
         self,
