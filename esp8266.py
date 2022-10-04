@@ -567,6 +567,7 @@ def parseHTTP(httpRes):
     header = httpRes[0].partition(b":")[2]
     httpRes = httpRes[2]
 
+    httpErrCode = 0
     for code in header.partition(b"\r\n")[0].split():
         if code.isdigit():
             httpErrCode = int(code)
