@@ -458,9 +458,8 @@ class ESP8266:
                             "Writing data from http response to file:",
                             f"{chunk_dir}/{file}",
                         )
-                        f = open(f"{chunk_dir}/{file}", "ab")
-                        f.write(resp)
-                        f.close()
+                        with open(f"{chunk_dir}/{file}", "ab") as f:
+                            f.write(resp)
                     else:
                         print(
                             "NOT writing data from http response to file:",
