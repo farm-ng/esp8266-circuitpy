@@ -377,6 +377,13 @@ class ESP8266:
         else:
             return False
 
+    def closeTCPConnection(self):
+        """
+        This function is used to close connection between ESP8266 and Host.
+        Used after the HTTP Get/Post operation.
+        """
+        self._sendToESP8266("AT+CIPCLOSE\r\n")
+
     def doHttpGet(
         self,
         host: str,
@@ -467,7 +474,7 @@ class ESP8266:
                         )
 
                     if close_conn:
-                        self._sendToESP8266("AT+CIPCLOSE\r\n")
+                        self.closeTCPConnection()
 
                     if resp is not None:
                         return code, resp
